@@ -17,6 +17,7 @@ router = DefaultRouter()
 prefixed with recipes"""
 router.register('recipes', views.RecipeViewSet)
 router.register('tags', views.TagViewSet)
+router.register('ingredients', views.IngredientViewSet)
 
 """Below line used for the creation of reverse url used for testing"""
 app_name = 'recipe'

@@ -11,7 +11,9 @@ from rest_framework.permissions import IsAuthenticated
 from core.models import(
     Recipe,
     Tag,
+    Ingredient,
 )
+
 from recipe import serializers
 
 """ModelViewSet used with specific model definition like Recipe
@@ -50,18 +52,29 @@ class RecipeViewSet(viewsets.ModelViewSet):
         when we create a recipe"""
         serializer.save(user=self.request.user)
 
-"""mixin provides additional functionality. ListModelMixin, specific for listing models
-GenericViewSet, along with CRUD operations, it provides desired functionality for our api  """
-class TagViewSet(mixins.DestroyModelMixin,
-                 mixins.ListModelMixin,
-                 mixins.UpdateModelMixin,
-                 viewsets.GenericViewSet):
-    """Manage tags in the database."""
-    serializer_class = serializers.TagSerializer
-    queryset = Tag.objects.all()
+
+class BaseRecipeAttrViewSet(mixins.DestroyModelMixin,
+                            mixins.UpdateModelMixin,
+                            mixins.ListModelMixin,
+                            viewsets.GenericViewSet):
+    """Base viewset for recipe attributes like Tags and Ingradients."""
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         """Filter queryset to authenticated user."""
         return self.queryset.filter(user=self.request.user).order_by('-name')
+
+
+"""mixin provides additional functionality. ListModelMixin, specific for listing models
+GenericViewSet, along with CRUD operations, it provides desired functionality for our api  """
+class TagViewSet(BaseRecipeAttrViewSet):
+    """Manage tags in the database."""
+    serializer_class = serializers.TagSerializer
+    queryset = Tag.objects.all()
+
+
+class IngredientViewSet(BaseRecipeAttrViewSet):
+    """Manage ingredients in the database."""
+    serializer_class = serializers.IngredientSerializer
+    queryset = Ingredient.objects.all()
