@@ -7,10 +7,19 @@ from rest_framework import (
     status,
 )
 
+from drf_spectacular.utils import (
+    extend_schema_view,
+    extend_schema,
+    OpenApiParameter,
+    OpenApiTypes,
+)
+
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
+
+from recipe import serializers
 
 from core.models import(
     Recipe,
@@ -18,23 +27,63 @@ from core.models import(
     Ingredient,
 )
 
-from recipe import serializers
+"""Below is schema used by Django spectacular to extend the
+documentation view. here we can give as much info to the user
+about the usage and information about the api"""
+"""extend the schema for filter list endpoint"""
+@extend_schema_view(
+    list=extend_schema(
+        parameters=[
+            OpenApiParameter(
+                'tags',
+                OpenApiTypes.STR,
+                description='Comma separated list of tag IDs to filter',
+            ),
+            OpenApiParameter(
+                'ingredients',
+                OpenApiTypes.STR,
+                description='Comma separated list of ingredient IDs to filter',
+            ),
+        ]
+    )
+)
 
-"""ModelViewSet used with specific model definition like Recipe
-ModelViewSet gives already defined logic for CRUD operation"""
+
+
 class RecipeViewSet(viewsets.ModelViewSet):
     """View for manage recipe APIs."""
+
+    """ModelViewSet used with specific model definition like Recipe
+    ModelViewSet gives already defined logic for CRUD operation"""
     serializer_class = serializers.RecipeDetailSerializer
     queryset = Recipe.objects.all()
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
+
+    """passed strings contains tags/ingredients ids, that
+    will be converted into integer list[]"""
+    def _params_to_ints(self, qs):
+        """Convert a list of strings to integers."""
+        return [int(str_id) for str_id in qs.split(',')]
 
     """By default get_queryset returns all the objects in the db
     we have override this function to return only the objects/recipe
     of the logged-in/current user"""
     def get_queryset(self):
         """Retrieve recipes for authenticated user."""
-        return self.queryset.filter(user=self.request.user).order_by('-id')
+        tags = self.request.query_params.get('tags')
+        ingredients = self.request.query_params.get('ingredients')
+        queryset = self.queryset
+        if tags:
+            tag_ids = self._params_to_ints(tags)
+            queryset = queryset.filter(tags__id__in=tag_ids)
+        if ingredients:
+            ingredient_ids = self._params_to_ints(ingredients)
+            queryset = queryset.filter(ingredients__id__in=ingredient_ids)
+
+        return queryset.filter(
+            user=self.request.user
+        ).order_by('-id').distinct()
 
     """Below method available in django documentation
     which returns serializer class to be used"""
@@ -72,6 +121,18 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+@extend_schema_view(
+    list=extend_schema(
+        parameters=[
+            OpenApiParameter(
+                'assigned_only',
+                OpenApiTypes.INT, enum=[0, 1],
+                description='Filter by items assigned to recipes.',
+            ),
+        ]
+    )
+)
+
 
 class BaseRecipeAttrViewSet(mixins.DestroyModelMixin,
                             mixins.UpdateModelMixin,
@@ -83,11 +144,20 @@ class BaseRecipeAttrViewSet(mixins.DestroyModelMixin,
 
     def get_queryset(self):
         """Filter queryset to authenticated user."""
-        return self.queryset.filter(user=self.request.user).order_by('-name')
+        assigned_only = bool(
+            int(self.request.query_params.get('assigned_only', 0))
+        )
+        queryset = self.queryset
+        if assigned_only:
+            queryset = queryset.filter(recipe__isnull=False)
+
+        return queryset.filter(
+            user=self.request.user
+        ).order_by('-name').distinct()
 
 
 """mixin provides additional functionality. ListModelMixin, specific for listing models
-GenericViewSet, along with CRUD operations, it provides desired functionality for our api  """
+GenericViewSet, along with CRUD operations, it provides desired functionality for our api"""
 class TagViewSet(BaseRecipeAttrViewSet):
     """Manage tags in the database."""
     serializer_class = serializers.TagSerializer
